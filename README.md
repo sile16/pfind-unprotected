@@ -27,7 +27,7 @@ optional arguments:
 
 # Example
 ```
-python3 pfind-unprotected.py --api-token eabx168-eb95-2930-da9f-bc1a3af270 --enable-check either  10.10.4.1
+python3 pfind-unprotected.py 10.10.4.1 --user pureuser
 
 Volume mr-matt-disabled is not in a local or remote PG with a schedule enabled or allowed target.
 Volume mr-matt-not-in-pg is not in a local or remote PG with a schedule enabled or allowed target.
