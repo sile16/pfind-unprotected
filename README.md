@@ -2,6 +2,7 @@
 Finds volumes not in a protection group on a Pure FlashArray.
 
 
+```
 usage: pfind-unprotected.py [-h] [--user USER] [--pass PASSWORD]
                             [--api-token API_TOKEN]
                             [--enable-check [{local,remote,either,nocheck}]]
@@ -22,12 +23,13 @@ optional arguments:
                         Check if local, or remote schedule is enabled on PG.
                         Remote checks also ensure that there is at least 1
                         allowed target. (default: either)
-
+```
 
 # Example
-
+```
 python3 pfind-unprotected.py --api-token eabx168-eb95-2930-da9f-bc1a3af270 --enable-check either 
 
 Volume mr-matt-disabled is not in a local or remote PG with a schedule enabled or allowed target.
 Volume mr-matt-not-in-pg is not in a local or remote PG with a schedule enabled or allowed target.
 Volume mr-matt-remote-pg is not in a local or remote PG with a schedule enabled or allowed target.
+```
