@@ -11,6 +11,7 @@ import re
 from datetime import timedelta
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+#checks for at least 1 allowed target on the protection group
 def target_check(item):
     if 'targets' not in item or not item['targets']:
         return False
@@ -19,10 +20,9 @@ def target_check(item):
             return  True
     return False
 
-
-
 def main():
-    parser = argparse.ArgumentParser(description='Find unprotected volumes on a Pure FlashArray')
+    parser = argparse.ArgumentParser(description='Find unprotected volumes on a Pure FlashArray',
+                                     allow_abbrev=False)
     parser.add_argument(dest='array', help='Array FQDN or IP')
     parser.add_argument('--user',  action='store', dest='user', help='username, required if no api-token')
     parser.add_argument('--pass',  action='store', dest='password', help='password - will prompt if missing')
@@ -34,7 +34,7 @@ def main():
                     nargs='?',
                     choices=['local', 'remote', 'either', 'nocheck'],
                     help='Check if local, or remote schedule is enabled on PG.  \
-                          Remote checks also that there is at least 1 allowed target. (default: %(default)s)')
+                          Remote checks also ensure that there is at least 1 allowed target. (default: %(default)s)')
     args = parser.parse_args()
 
 
@@ -85,7 +85,7 @@ def main():
     
     #make the output message correct
     if args.enable_check == 'either':
-        msg = 'is not in a local or remote PG with a schedule enabled or allowed target.'
+        msg = 'is not in a local or remote PG with a schedule enabled and allowed target.'
     elif args.enable_check == 'nocheck':
         msg  = 'is not in a PG.'
     elif args.enable_check == 'local':
