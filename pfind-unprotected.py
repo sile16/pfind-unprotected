@@ -26,7 +26,8 @@ def main():
     parser.add_argument(dest='array', help='Array FQDN or IP')
     parser.add_argument('--user',  action='store', dest='user', help='username, required if no api-token')
     parser.add_argument('--pass',  action='store', dest='password', help='password - will prompt if missing')
-    parser.add_argument('--api-token', dest='api_token', action='store', help='api-token')
+    parser.add_argument('--api-token', dest='api_token', action='store', 
+                        help='api-token (not required if user/pass is provided')
     parser.add_argument('--enable-check',
                     dest='enable_check',
                     default='either',
