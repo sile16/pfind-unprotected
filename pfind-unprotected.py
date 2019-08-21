@@ -4,11 +4,10 @@
 import argparse
 import purestorage
 import getpass
-import datetime
-import dateutil.parser
 import urllib3
-import re
-from datetime import timedelta
+from concurrent.futures import ThreadPoolExecutor
+
+#Disable the SSL certificate warning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 #checks for at least 1 allowed target on the protection group
@@ -36,70 +35,117 @@ def main():
                     choices=['local', 'remote', 'either', 'nocheck'],
                     help='Check if local, or remote schedule is enabled on PG.  \
                           Remote checks also ensure that there is at least 1 allowed target. (default: %(default)s)')
+    parser.add_argument('--quiet', default=False, action='store_true', help='Only print vol name')
+    parser.add_argument('--ignore', default='',help='ignores volumes that contain the ignore string' )
     args = parser.parse_args()
 
 
-    #parse Auth info and connect to array
-    if args.api_token:
-        array = purestorage.FlashArray(args.array, api_token=args.api_token)
-    else:
-        if args.user:
-            if not args.password:
-                args.password = getpass.getpass("Password for {} :".format(args.user))
-            
-            array =  purestorage.FlashArray(args.array, username=args.user, password=args.password)
+    try: 
+        #parse Auth info and connect to array
+        if args.api_token:
+            array = purestorage.FlashArray(args.array, api_token=args.api_token)
         else:
-            #error neither api token or user must be specified.
-            parser.error('Must provide either an api-token or username.')
-    
-    #check to see if the pg has an enabled target
-    target_allowed_pgs = {}
-    for pg in array.list_pgroups():
-        if target_check(pg):
-            target_allowed_pgs[pg['name']] = True
+            if args.user:
+                if not args.password:
+                    args.password = getpass.getpass("Password for {} :".format(args.user))
+                
+                array =  purestorage.FlashArray(args.array, username=args.user, password=args.password)
+            else:
+                #error neither api token or user must be specified.
+                parser.error('Must provide either an api-token or username.')
 
-    # get list of protection groups
-    # check the enabled status per the enabled check
-    checked_pgs = {}
-    for pg in array.list_pgroups(schedule=True):
-        if args.enable_check == 'nocheck':
-            checked_pgs[pg['name']] = pg
+        
+        
+        # run all the API calls in threads up front simultaniously
+        # This is a pretty slick way to use threads!  I like it!
+        pool = ThreadPoolExecutor(5)
+        list_pgroups_f = pool.submit(array.list_pgroups)
+        list_pgroups_schedule_f = pool.submit(array.list_pgroups, schedule=True)
+        list_hgroups_f = pool.submit(array.list_hgroups)
+        list_volumes_connect_f  = pool.submit(array.list_volumes,connect=True)
+        list_volumes_f = pool.submit(array.list_volumes)
+
+
+        # get list of protection groups
+        # check the enabled status per the enabled check
+        # make sure the protection group is actually enabled
+        pg_schedules = {}
+        for pg in list_pgroups_schedule_f.result():
+            pg_schedules[pg['name']] = pg
+            
+
+        #find all the volumes, hosts, & hostgroups that are in the protection groups
+        protected_vols = {}
+        protected_hosts = {}
+        protected_hgroups = {}
+        for pg in list_pgroups_f.result():
+            # Check the PG to make sure it meets the rules:
+            schedule = pg_schedules[pg['name']] 
+            if args.enable_check == 'nocheck':
+                pass
+            elif args.enable_check == 'local':
+                if schedule['snap_enabled']:
+                    pass
+            elif args.enable_check == 'remote' and  \
+                schedule['replicate_enabled'] and target_check(pg):
+                    pass
+            elif args.enable_check == 'either':
+                if schedule['snap_enabled'] or  \
+                    ( schedule['replicate_enabled'] and target_check(pg) ):
+                    pass
+            else:
+                continue
+
+
+            #Passed our checks now lets keep track of protected objects
+            if pg['volumes']:
+                for v in pg['volumes']:
+                    protected_vols[v] = True
+            if pg['hosts']:
+                for h in pg['hosts']:
+                    protected_hosts[h] = True
+            if pg['hgroups']: 
+                for hg in pg['hgroups']:
+                    protected_hgroups[hg] = True
+        
+        #find all the hosts that are in protected host groups
+        for hg in list_hgroups_f.result():
+            if hg['name'] in protected_hgroups:
+                for h in hg['hosts']:
+                    protected_hosts[h] = True
+        
+        #find all volumes that are mapped to either a protected host or hgroup
+        for v in list_volumes_connect_f.result(): 
+            if v['host'] in protected_hosts or v['hgroup'] in protected_hgroups:
+                protected_vols[v['name']] = True
+        
+        
+        #make the output message correct
+        if args.enable_check == 'either':
+            msg = ' is not in a local or remote PG with a schedule enabled and allowed target.'
+        elif args.enable_check == 'nocheck':
+            msg = ' is not in a PG.'
         elif args.enable_check == 'local':
-            if pg['snap_enabled']:
-                checked_pgs[pg['name']] = pg
+            msg = " is not in a PG with a snap schedule enabled."
         elif args.enable_check == 'remote':
-            if pg['replicate_enabled'] and  \
-               pg['name'] in target_allowed_pgs:
-                checked_pgs[pg['name']] = pg
-        elif args.enable_check == 'either':
-            if pg['snap_enabled'] or ( pg['replicate_enabled'] and  \
-                                       pg['name'] in target_allowed_pgs):
-                checked_pgs[pg['name']] = pg
+            msg = " is not in a PG with a remote schedule enabled and allowed target."
+        
+        if args.quiet:
+            msg = ""
 
-    
-    # get list of all protected volumes and ensure they are in a PG
-    # That is enabled per the enabled check
-    checked_vols = {}
-    for vol in array.list_volumes(protect=True):
-        if vol['protection_group'] in checked_pgs:
-            checked_vols[vol['name']] = True
-    
-    #make the output message correct
-    if args.enable_check == 'either':
-        msg = 'is not in a local or remote PG with a schedule enabled and allowed target.'
-    elif args.enable_check == 'nocheck':
-        msg  = 'is not in a PG.'
-    elif args.enable_check == 'local':
-        msg = "is not in a PG with a snap schedule enabled."
-    elif args.enable_check == 'remote':
-        msg = "is not in a PG with a remote schedule enabled and allowed target."
-
-    # Get all volumes and list the ones not potected.
-    all_vols = array.list_volumes()
-    all_vols = sorted(all_vols, key=lambda k: k['name'])
-    for vol in all_vols:
-        if vol['name'] not in checked_vols:
-            print("Volume {} {}".format(vol['name'], msg))
+        # Get all volumes and list the ones not protected.
+        all_vols = list_volumes_f.result()
+        all_vols = sorted(all_vols, key=lambda k: k['name'])
+        for vol in all_vols:
+            #ignore volumes if they have this string.
+            if args.ignore:
+                if args.ignore in vol['name']:
+                    continue
+            if vol['name'] not in protected_vols:
+                print("{} {}".format(vol['name'], msg))
+    except AttributeError as e:
+        print("Error connecting to array, check IP, network: {}".format(e))
+        quit()
 
 
 if __name__ == '__main__':
