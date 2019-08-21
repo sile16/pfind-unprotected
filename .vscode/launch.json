@@ -11,7 +11,7 @@
             "program": "${file}",
             "args": ["dfw-lab-x50-1.dfwlab.purestorage.com", 
                      "--api-token","ebfab168-eb75-8330-d99f-bc7a0373a270",
-                     "--enable-check", "remote","--ignore","vvol"]
+                     "--enable-check", "either","--ignore","vvol"]
         },
         {
             "name": "Python: Current File (Integrated Terminal)",

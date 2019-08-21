@@ -83,16 +83,16 @@ def main():
             schedule = pg_schedules[pg['name']] 
             if args.enable_check == 'nocheck':
                 pass
-            elif args.enable_check == 'local':
-                if schedule['snap_enabled']:
-                    pass
+            elif args.enable_check == 'local' and \
+                schedule['snap_enabled']:
+                pass
             elif args.enable_check == 'remote' and  \
                 schedule['replicate_enabled'] and target_check(pg):
-                    pass
-            elif args.enable_check == 'either':
-                if schedule['snap_enabled'] or  \
-                    ( schedule['replicate_enabled'] and target_check(pg) ):
-                    pass
+                pass
+            elif args.enable_check == 'either' and \
+                    ( schedule['snap_enabled'] or  \
+                    ( schedule['replicate_enabled'] and target_check(pg) )):
+                pass
             else:
                 continue
 
